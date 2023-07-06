@@ -11,6 +11,7 @@ db = SQLAlchemy(app)
 class User(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     fingerprint_code = db.Column(db.String(120), unique=True, nullable=False)
+    access_history = db.relationship('AccessHistory', backref='user', lazy=True)
 
     def to_dict(self):
         return {
@@ -18,6 +19,7 @@ class User(db.Model):
             'fingerprint_code': self.fingerprint_code,
             'access_history': [access.date.strftime('%Y-%m-%d %H:%M:%S') for access in self.access_history]
         }
+
 
 class AccessHistory(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -34,9 +36,12 @@ class AccessHistory(db.Model):
 # Inicialize a comunicação serial com o Arduino
 arduino = serial.Serial('COM5', 9600)
 
+print("a")
+
 @app.route('/create_user', methods=['POST'])
 def create_user():
     data = request.get_json()
+    print("a")
     fingerprint_code = data.get('fingerprint_code')
     user = User(fingerprint_code=fingerprint_code)
     db.session.add(user)
@@ -62,4 +67,4 @@ def unlock_door():
 if __name__ == '__main__':
     with app.app_context():
         db.create_all()
-    app.run(debug=True)
+    app.run(host='0.0.0.0', debug=True)

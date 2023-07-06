@@ -1,3 +1,4 @@
+#include <Adafruit_Fingerprint.h>
 #include <SoftwareSerial.h>
 #include <ESP8266HTTPClient.h>
 #include <ESP8266WiFi.h>
@@ -8,9 +9,9 @@
 
 const char* ssid = "WIFI_ALUNOS";
 const char* password = "WIFIgps123";
-const char* serverIP = "192.168.0.100"; // Substitua pelo IP do seu servidor Flask
 
 SoftwareSerial mySerial(12, 14); // RX, TX
+Adafruit_Fingerprint finger = Adafruit_Fingerprint(&mySerial);
 
 void setup() {
   Serial.begin(9600);
@@ -19,10 +20,18 @@ void setup() {
   pinMode(pinGreenLed, OUTPUT);
   pinMode(pinButton, INPUT);
 
-  // Inicialize a comunicação serial
-  mySerial.begin(57600);
+  finger.begin(57600);
+  if (finger.verifyPassword()) {
+    Serial.println("Found fingerprint sensor!");
+  } else {
+    Serial.println("Did not find fingerprint sensor :(");
+    while (1) {
+      digitalWrite(pinRedLed, digitalRead(pinRedLed) == HIGH ? LOW : HIGH);
+      delay(1); 
+    }
+  }
 
-  // Conecte-se ao WiFi
+  // Connect to WiFi
   WiFi.mode(WIFI_STA);
   WiFi.begin(ssid, password);
   Serial.println("Connecting to WiFi...");
@@ -36,6 +45,7 @@ void setup() {
 }
 
 void loop() {
+  Serial.println("aa");
   if (digitalRead(pinButton) == LOW) {
     createUser();
   } else {
@@ -43,35 +53,45 @@ void loop() {
   }
 }
 
+int getFingerprintID() {
+  uint8_t p = finger.getImage();
+  if (p != FINGERPRINT_OK) return -1;
+
+  p = finger.image2Tz();
+  if (p != FINGERPRINT_OK) return -1;
+
+  return finger.fingerID;
+}
+
 void createUser() {
   digitalWrite(pinRedLed, LOW);
   digitalWrite(pinGreenLed, HIGH);
 
-  int fingerCode = getFingerprintID();
-  while (fingerCode == -1) {
-    fingerCode = getFingerprintID();
+  int fingerprintCode = getFingerprintID();
+  while (fingerprintCode == -1) {
+    fingerprintCode = getFingerprintID();
     digitalWrite(pinGreenLed, digitalRead(pinGreenLed) == HIGH ? LOW : HIGH);
+    delay(300);
   }
 
-  Serial.println("Fingerprint code: " + String(fingerCode));
-
-  String jsonData = "{\"fingerprint_code\": " + String(fingerCode) + "}";
+  Serial.println(fingerprintCode);
 
   WiFiClient client;
   HTTPClient http;
 
-  // Faça a solicitação POST para o servidor Flask
-  String url = "http://" + String(serverIP) + "/create_user";
+  String url = "http://10.0.0.138:5000/create_user";
   http.begin(client, url);
   http.addHeader("Content-Type", "application/json");
 
-  Serial.println("Sending POST request...");
+  String jsonData = "{\"fingerprint_code\": " + String(fingerprintCode) + "}";
   int httpResponseCode = http.POST(jsonData);
 
   if (httpResponseCode > 0) {
-    Serial.println("Account created successfully!");
+    String response = http.getString();
+    Serial.println("User created successfully.");
+    Serial.println(response);
   } else {
-    Serial.println("Error creating account. HTTP response code: " + String(httpResponseCode));
+    Serial.println("Error creating user. HTTP response code: " + String(httpResponseCode));
   }
 
   http.end();
@@ -88,38 +108,4 @@ void openDoor() {
   digitalWrite(pinRedLed, HIGH);
   delay(3000);
   digitalWrite(pinRedLed, LOW);
-}
-
-int getFingerprintID() {
-  // Envie os comandos necessários para obter o código da impressão digital do sensor
-  mySerial.write(0xEF);
-  mySerial.write(0x01);
-  mySerial.write(0xFF);
-  mySerial.write(0xFF);
-  mySerial.write(0xFF);
-  mySerial.write(0xFF);
-  mySerial.write(0x01);
-  mySerial.write(0x00);
-
-  // Aguarde a resposta do sensor
-  while (mySerial.available() < 9)
-    ;
-
-  if (mySerial.read() != 0xEF) return -1;
-  if (mySerial.read() != 0x01) return -1;
-
-  int len = mySerial.read();
-  len <<= 8;
-  len |= mySerial.read();
-
-  if (mySerial.read() != 0x00) return -1;
-
-  uint8_t high = mySerial.read();
-  uint8_t low = mySerial.read();
-  int fingerCode = high << 8 | low;
-
-  mySerial.read();
-  mySerial.read();
-
-  return fingerCode;
 }
