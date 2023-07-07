@@ -106,6 +106,27 @@ void openDoor() {
   }
 
   digitalWrite(pinRedLed, HIGH);
+
+  WiFiClient client;
+  HTTPClient http;
+
+  String url = "http://10.0.0.138:5000/unlock";
+  http.begin(client, url);
+  http.addHeader("Content-Type", "application/json");
+
+  String jsonData = "{\"user_id\": " + String(fingerCode) + "}";
+  int httpResponseCode = http.POST(jsonData);
+
+  if (httpResponseCode > 0) {
+    String response = http.getString();
+    Serial.println("Door unlocked and access time added.");
+    Serial.println(response);
+  } else {
+    Serial.println("Error unlocking door and adding access time. HTTP response code: " + String(httpResponseCode));
+  }
+
+  http.end();
+
   delay(3000);
   digitalWrite(pinRedLed, LOW);
 }

@@ -60,9 +60,19 @@ def add_access(user_id):
 
 @app.route('/unlock', methods=['POST'])
 def unlock_door():
-    # Aqui você pode enviar um comando para o Arduino para destravar a porta
-    arduino.write(b'unlock')
-    return jsonify({'message': 'Comando enviado'}), 200
+
+    # Cria um novo acesso no histórico
+    user_id = request.json.get('user_id')
+    user = User.query.get(user_id)
+    
+    if not user:
+        return jsonify({'message': 'User not found'}), 404
+    
+    access = AccessHistory(user_id=user.id)
+    db.session.add(access)
+    db.session.commit()
+    
+    return jsonify({'message': 'Door unlocked and access time added', 'user': user.to_dict()}), 200
 
 if __name__ == '__main__':
     with app.app_context():
